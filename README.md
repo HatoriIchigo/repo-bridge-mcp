@@ -75,6 +75,14 @@ Claudeの場合、`/plugin`で導入が可能です。
 
 ### 4. Gitブランチ戦略、コミットメッセージの修正
 
+`.claude/skills/git-branch-strategy.md`を同じディレクトリに移動
+
 プロジェクトに応じて、Gitのブランチ戦略、コミットメッセージの書き方などを修正してください。
 
-`~/.claude/skills/git-branch-strategy/SKILL.md`を修正してください。
+
+## 今後追加していきたいもの
+
+- 単体テスト自動作成
+- エージェント関連
+- コードレビュー
+
