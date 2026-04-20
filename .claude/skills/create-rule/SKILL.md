@@ -1,6 +1,6 @@
 ---
 name: create-rule
-description: .claude/rules/に新しいルールファイルを作成するスキル
+description: Use this skill when creating a new rule file under .claude/rules/.
 ---
 
 ## create-ruleスキルとは

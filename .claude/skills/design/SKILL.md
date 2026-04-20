@@ -1,6 +1,6 @@
 ---
 name: design
-description: Skill
+description: Use this skill when creating or updating design documents (docs/design.md) for a project.
 ---
 
 # design.mdの書き方

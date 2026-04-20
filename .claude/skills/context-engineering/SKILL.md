@@ -1,6 +1,6 @@
 ---
 name: context-engineering
-description: context-engineeringの進め方についてのスキル、コンテキストファイルの書き方
+description: Use this skill when planning context engineering or writing context files for AI-assisted development.
 ---
 
 ## コンテキストエンジニアリングとは

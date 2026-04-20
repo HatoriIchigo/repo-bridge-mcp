@@ -1,6 +1,6 @@
 ---
 name: git-strategy
-description: Gitブランチ命名規則、ブランチ戦略、コミットメッセージ
+description: Use this skill when deciding git branch names, branch strategy, or writing commit messages.
 ---
 
 ## Gitブランチ命名規則
