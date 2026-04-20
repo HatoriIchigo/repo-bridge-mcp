@@ -46,6 +46,18 @@ Claudeの場合、`/plugin`で導入が可能です。
 
 プロジェクトに応じて、Gitのブランチ戦略、コミットメッセージの書き方などを修正してください。
 
+### 5. design.mdの作成
+
+`.claude/rules/design.md`及び`.claude/skills/design/SKILL.md`を同じディレクトリに移動
+
+Claudeに`/design`を実行させ、`docs/design.md`を作成してください。
+
+#### design.mdの進め方
+
+1. Claudeに`/design`を実行させ、`docs/design.md`を作成してもらう
+2. design.mdを人間やAIがレビューする
+3. Claudeで`/clear`後にdesign.mdに沿って実装してもらう
+
 ## 今後追加していきたいもの
 
 - 単体テスト自動作成
@@ -53,4 +65,3 @@ Claudeの場合、`/plugin`で導入が可能です。
 - コードレビュー
 - モックサーバ(frontend/backend)作成
 - bugfix
-- design.mdの作成

@@ -12,16 +12,20 @@ path: CLAUDE.md
 
 `ls`等を使用し、ディレクトリ構成を**表形式**で記載する。
 ソースコード以外のディレクトリは3階層以上書かず、ソースコードディレクトリはソースファイル手前の階層まで記載する。
-ただし、`.context`は保持してください。
+
+以下ディレクトリおよびファイルは実際になくても記載すること。
+- `.context/`
+- `docs/design.md`: 設計ドキュメント
+
 
 ### 記載例
 
 ```markdown
 | ディレクトリ | 説明 |
 | -- | -- |
-| .adr | ADR配置場所 |
-| .context | コンテキストファイル配置場所 |
-| .devcontainer | DevContainer配置場所 |
+| .adr/ | ADR配置場所 |
+| .context/ | コンテキストファイル配置場所 |
+| .devcontainer/ | DevContainer配置場所 |
 | src/main/ | ソースコード |
 | src/test/ | テストコード |
 ```

@@ -11,6 +11,7 @@
 | .adr | ADR配置場所 |
 | .context | コンテキストファイル配置場所 |
 | .devcontainer | DevContainer配置場所 |
+| docs/design.md | 設計ドキュメント |
 | src/main/ | ソースコード |
 | src/test/ | テストコード |
 {{その他ディレクトリ構成を記載}}
