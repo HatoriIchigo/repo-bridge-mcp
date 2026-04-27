@@ -1,91 +1,47 @@
-# AI駆動開発テンプレート　アプリケーション版
+# repo-bridge-mcp
 
 ## 概要
 
-このレポジトリはAI駆動開発で使用するテンプレートのアプリケーション版です。
+複数リポジトリに分散したコード・ドキュメントを、現在の作業コンテキストに応じて横断的に参照するMCPサーバ。
+必要な情報のみを動的に取得することで、ノイズを抑えつつ安全にプロジェクト全体の理解を補助する。
 
-## 適用ガイド
+## 技術スタック
 
-### 1. CLAUDE.md の適用
+- **言語**: TypeScript
+- **ランタイム**: Node.js
+- **MCPフレームワーク**: @modelcontextprotocol/sdk
+- **パッケージ管理**: npm
 
-CLAUDE.mdをコピーし、プロジェクトルートに配置してください。
-Claudeはデフォルトで、プロジェクトルートのCLAUDE.mdを読み込みます。
-
-続けてCLAUDE.mdを修正します。
-`.claude/rules/claude.md`をコピーし、ClaudeにCLAUDE.mdの更新を指示してください。
-
-#### AGENTS.mdへのコピー
-
-Claude Code以外のAIツール（Gemini CLI、Codex CLIなど）も併用する場合は、CLAUDE.mdをAGENTS.mdにコピーしてください。
-AGENTS.mdは複数のAIエージェントが共通で参照する規約ファイルとして機能します。
+## セットアップ
 
 ```bash
-cp CLAUDE.md AGENTS.md
+npm install
+npm run build
 ```
 
-Claude Codeのみを使用する場合、この手順は不要です。
+## 使い方
 
-### 2. コンテキストエンジニアリング用のプロンプトを移動
+### Claude Codeへの登録
 
-`.claude/rules/context.md`及び`.claude/skills/context-engineering/SKILL.md`を同じディレクトリに移動
+`claude mcp add` でstdioサーバとして登録する。
 
-#### コンテキストエンジニアリングの進め方
+```bash
+claude mcp add repo-bridge -- node /path/to/repo-bridge-mcp/dist/index.js
+```
 
-1. claudeにコンテキストファイルを`.context`ディレクトリ配下に作成してもらう
-2. コンテキストファイルを人間やAIがレビューする
-3. Claudeで`/clear`後にコンテキストファイルに沿って実装してもらう
+### 設定
 
-### 3. MCPの活用
+`config.json` に参照対象リポジトリを登録する（詳細は `docs/design.md` 参照）。
 
-MCPを導入します。
-Claudeの場合、`/plugin`で導入が可能です。
+## コマンド
 
-個人的には以下のプラグインをお勧めします。
+| コマンド | 用途 |
+|---------|------|
+| `npm install` | 依存パッケージインストール |
+| `npm run build` | ビルド |
+| `npm run dev` | 開発サーバ起動 |
+| `npm test` | テスト実行 |
 
-| プラグイン名 | 説明 |
-| -- | -- |
-| context7 | 最新のドキュメントを反映可能 |
-| serena | コーディング時のコンテキスト削減が可能 |
-| Github MCP Server（任意） | Githubと連携が可能になり、issueの取得やプルリクの自動化が可能 |
-| 各種LSPサーバ | LSPとやりとりすることで、丁寧なコーディングが可能になる |
+## ドキュメント
 
-なお、入れすぎるとコンテキストを圧縮するため、必要最低限で入れることをお勧めします
-
-### 4. Gitブランチ戦略、コミットメッセージの修正
-
-`.claude/skills/git-branch-strategy.md`を同じディレクトリに移動
-
-プロジェクトに応じて、Gitのブランチ戦略、コミットメッセージの書き方などを修正してください。
-
-### 5. design.mdの作成
-
-`.claude/rules/design.md`及び`.claude/skills/design/SKILL.md`を同じディレクトリに移動
-
-Claudeに`/design`を実行させ、`docs/design.md`を作成してください。
-
-#### design.mdの進め方
-
-1. Claudeに`/design`を実行させ、`docs/design.md`を作成してもらう
-2. design.mdを人間やAIがレビューする
-3. Claudeで`/clear`後にdesign.mdに沿って実装してもらう
-
-### 6. screen.mdの作成
-
-`.claude/rules/screen.md`及び`.claude/skills/screen/SKILL.md`を同じディレクトリに移動
-
-Claudeに`/screen`を実行させ、`docs/screen.md`を作成してください。
-
-#### screen.mdの進め方
-
-1. `docs/design.md`が作成済みであること（手順5が完了していること）
-2. Claudeに`/screen`を実行させ、`docs/screen.md`を作成してもらう
-3. screen.mdを人間やAIがレビューする
-4. Claudeで`/clear`後にscreen.mdに沿って実装してもらう
-
-## 今後追加していきたいもの
-
-- 単体テスト自動作成
-- エージェント関連
-- コードレビュー
-- モックサーバ(frontend/backend)作成
-- bugfix
+- [設計書](docs/design.md)
