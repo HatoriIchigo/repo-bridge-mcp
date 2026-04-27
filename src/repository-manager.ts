@@ -1,6 +1,6 @@
 import { readdir, readFile } from "fs/promises";
 import { join } from "path";
-import type { Repository, RepositoryConfig } from "./types.js";
+import type { RepositoryConfig } from "./types.js";
 
 function isRepositoryConfig(value: unknown): value is RepositoryConfig {
   if (typeof value !== "object" || value === null) return false;
@@ -14,7 +14,7 @@ function isRepositoryConfig(value: unknown): value is RepositoryConfig {
   );
 }
 
-export async function loadRepositories(baseDir: string = process.cwd()): Promise<Repository[]> {
+export async function loadRepositories(baseDir: string = process.cwd()): Promise<RepositoryConfig[]> {
   const repoBridgeDir = join(baseDir, ".repo-bridge");
 
   let entries: string[];
@@ -27,7 +27,7 @@ export async function loadRepositories(baseDir: string = process.cwd()): Promise
     return [];
   }
 
-  const repositories: Repository[] = [];
+  const repositories: RepositoryConfig[] = [];
 
   for (const filename of entries) {
     try {
@@ -36,7 +36,7 @@ export async function loadRepositories(baseDir: string = process.cwd()): Promise
 
       if (!isRepositoryConfig(parsed) || !parsed.enabled) continue;
 
-      repositories.push({ id: parsed.id, name: parsed.name, path: parsed.path });
+      repositories.push(parsed);
     } catch {
       continue;
     }

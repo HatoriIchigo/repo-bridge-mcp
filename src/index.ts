@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { loadRepositories } from "./repository-manager.js";
+import { searchFiles, readFileContent } from "./file-searcher.js";
 
 const server = new McpServer({
   name: "repo-bridge-mcp",
@@ -13,7 +14,8 @@ server.tool(
   "登録済みリポジトリの一覧取得",
   {},
   async () => {
-    const repositories = await loadRepositories();
+    const configs = await loadRepositories();
+    const repositories = configs.map(({ id, name, path }) => ({ id, name, path }));
     return {
       content: [{ type: "text", text: JSON.stringify(repositories) }],
     };
@@ -27,8 +29,12 @@ server.tool(
     pattern: z.string().describe("検索パターン"),
     repository_id: z.string().optional().describe("リポジトリID（省略時は全リポジトリ対象）"),
   },
-  async () => {
-    throw new Error("Not implemented");
+  async ({ pattern, repository_id }) => {
+    const configs = await loadRepositories();
+    const results = await searchFiles({ pattern, repository_id, configs });
+    return {
+      content: [{ type: "text", text: JSON.stringify(results) }],
+    };
   }
 );
 
@@ -39,8 +45,12 @@ server.tool(
     repository_id: z.string().describe("リポジトリID"),
     path: z.string().describe("ファイルパス"),
   },
-  async () => {
-    throw new Error("Not implemented");
+  async ({ repository_id, path }) => {
+    const configs = await loadRepositories();
+    const content = await readFileContent({ repository_id, path, configs });
+    return {
+      content: [{ type: "text", text: content }],
+    };
   }
 );
 

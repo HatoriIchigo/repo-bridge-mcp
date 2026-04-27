@@ -35,7 +35,7 @@ describe("正常系", () => {
 
     const result = await loadRepositories(baseDir);
 
-    expect(result).toEqual([{ id: "my-repo", name: "My Repository", path: "/repos/my-repo" }]);
+    expect(result).toEqual([{ id: "my-repo", name: "My Repository", path: "/repos/my-repo", enabled: true, exclude_patterns: ["node_modules"] }]);
   });
 
   it("TC2: JSONファイルが複数件・全て enabled: true の場合に全件返す", async () => {

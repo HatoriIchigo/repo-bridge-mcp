@@ -11,3 +11,9 @@ export interface Repository {
   name: string;
   path: string;
 }
+
+export interface FileEntry {
+  repository_id: string;
+  path: string;
+  type: "file" | "directory";
+}
