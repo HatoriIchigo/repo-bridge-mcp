@@ -78,7 +78,6 @@ erDiagram
     string id PK
     string name
     string path
-    boolean enabled
   }
   FileEntry {
     string path PK
