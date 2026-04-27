@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { loadRepositories } from "./repository-manager.js";
 
 const server = new McpServer({
   name: "repo-bridge-mcp",
@@ -12,7 +13,10 @@ server.tool(
   "登録済みリポジトリの一覧取得",
   {},
   async () => {
-    throw new Error("Not implemented");
+    const repositories = await loadRepositories();
+    return {
+      content: [{ type: "text", text: JSON.stringify(repositories) }],
+    };
   }
 );
 
