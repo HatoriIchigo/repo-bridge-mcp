@@ -16,13 +16,17 @@ interface ReadFileOptions {
 
 /** globパターンを正規表現に変換する（外部ライブラリ不使用）。 */
 function globToRegex(pattern: string): RegExp {
+  const hasDoubleGlob = pattern.includes("**");
   const escaped = pattern
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\?/g, "[^/]")
     .replace(/\*\*/g, "§DOUBLE§")
     .replace(/\*/g, "[^/]*")
-    .replace(/§DOUBLE§/g, ".*")
-    .replace(/\?/g, "[^/]");
-  return new RegExp(`(^|/)${escaped}$`);
+    .replace(/§DOUBLE§\//g, "(.+/)?")
+    .replace(/§DOUBLE§/g, ".*");
+  return hasDoubleGlob
+    ? new RegExp(`^${escaped}$`)
+    : new RegExp(`(^|/)${escaped}$`);
 }
 
 /** ディレクトリを再帰的に走査し、全ファイルの相対パスを収集する。 */
@@ -134,16 +138,10 @@ export async function searchContent(options: SearchContentOptions): Promise<Cont
       }
 
       const lines = content.split("\n");
-      let hitIndices = lines
-        .map((line, idx) => (line.includes(keyword) ? idx : -1))
+      const lowerKeyword = keyword.toLowerCase();
+      const hitIndices = lines
+        .map((line, idx) => (line.toLowerCase().includes(lowerKeyword) ? idx : -1))
         .filter((idx) => idx !== -1);
-
-      if (hitIndices.length === 0) {
-        const lowerKeyword = keyword.toLowerCase();
-        hitIndices = lines
-          .map((line, idx) => (line.toLowerCase().includes(lowerKeyword) ? idx : -1))
-          .filter((idx) => idx !== -1);
-      }
 
       if (hitIndices.length === 0) continue;
 

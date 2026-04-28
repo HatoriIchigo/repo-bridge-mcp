@@ -241,6 +241,30 @@ describe("searchContent", () => {
       expect(results[0].snippet).toContain("another keyword");
     });
 
+    it("TC-SC-007: 大文字キーワードで小文字ファイル内容にヒット", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(repoA, { recursive: true });
+      await writeFile(join(repoA, "memo.txt"), "memo content");
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "MEMO", configs });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].snippet).toContain("memo content");
+    });
+
+    it("TC-SC-008: 小文字キーワードで大文字ファイル内容にヒット", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(repoA, { recursive: true });
+      await writeFile(join(repoA, "memo.txt"), "MEMOですよ");
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "memo", configs });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].snippet).toContain("MEMOですよ");
+    });
+
     it("TC-SC-006: リポジトリパスが存在しない場合スキップ", async () => {
       const repoA = join(baseDir, "repo-a");
       const repoB = join(baseDir, "repo-b");
@@ -333,6 +357,33 @@ describe("境界値", () => {
     const result = await searchFiles({ pattern: "*.ts", configs: [] });
 
     expect(result).toEqual([]);
+  });
+
+  it("TC-F002-013: **/pattern がルート直下のファイルにマッチする", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(repoA, { recursive: true });
+    await writeFile(join(repoA, "memo.txt"), "root memo");
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const result = await searchFiles({ pattern: "**/memo.txt", configs });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].path).toBe("memo.txt");
+  });
+
+  it("TC-F002-014: **/pattern がネストしたファイルにもマッチする", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(join(repoA, "sub", "deep"), { recursive: true });
+    await writeFile(join(repoA, "memo.txt"), "root");
+    await writeFile(join(repoA, "sub", "memo.txt"), "sub");
+    await writeFile(join(repoA, "sub", "deep", "memo.txt"), "deep");
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const result = await searchFiles({ pattern: "**/memo.txt", configs });
+
+    expect(result).toHaveLength(3);
+    const paths = result.map((e) => e.path);
+    expect(paths).toEqual(expect.arrayContaining(["memo.txt", "sub/memo.txt", "sub/deep/memo.txt"]));
   });
 
   it("TC-F002-012: src/../src/main.ts はリポジトリ内に留まるため許可", async () => {
