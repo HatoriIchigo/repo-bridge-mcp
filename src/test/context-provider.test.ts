@@ -4,6 +4,10 @@ import { join } from "path";
 import { tmpdir } from "os";
 import type { RepositoryConfig, ContextResult } from "../types.js";
 
+jest.unstable_mockModule("../keyword-extractor.js", () => ({
+  extractKeywords: jest.fn(),
+}));
+
 let baseDir: string;
 
 const makeConfig = (id: string, repoPath: string, excludePatterns: string[] = []): RepositoryConfig => ({
@@ -27,8 +31,13 @@ async function callGetContext(
   args: { context: string; repository_id?: string },
   configs: RepositoryConfig[],
   cwd: string,
+  keywords?: string[],
 ): Promise<ContextResult[]> {
   jest.spyOn(process, "cwd").mockReturnValue(cwd);
+  const { extractKeywords } = await import("../keyword-extractor.js");
+  (extractKeywords as jest.MockedFunction<typeof extractKeywords>).mockResolvedValue(
+    keywords !== undefined ? keywords : [args.context],
+  );
   const { getContext } = await import("../context-provider.js");
   return getContext({ ...args, configs });
 }
@@ -228,5 +237,100 @@ describe("境界値", () => {
     expect(snippet).toContain("line6");
     expect(snippet).toContain("line7");
     expect(snippet).not.toContain("line8");
+  });
+});
+
+// OR検索・スコアリング・件数上限
+
+describe("OR検索", () => {
+  it("TC-N-010: 2キーワードのOR検索", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(repoA, { recursive: true });
+    await writeFile(join(repoA, "auth.ts"), "authentication logic");
+    await writeFile(join(repoA, "user.ts"), "user management");
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const results = await callGetContext({ context: "認証ユーザ管理" }, configs, repoA, ["authentication", "user"]);
+
+    const paths = results.map((r) => r.path);
+    expect(paths).toContain("auth.ts");
+    expect(paths).toContain("user.ts");
+    expect(results).toHaveLength(2);
+  });
+
+  it("TC-N-011: 複数キーワードが同一ファイルにヒット → 重複排除", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(repoA, { recursive: true });
+    await writeFile(join(repoA, "auth.ts"), "authentication token logic");
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const results = await callGetContext({ context: "認証トークン" }, configs, repoA, ["authentication", "token"]);
+
+    const paths = results.map((r) => r.path);
+    expect(paths.filter((p) => p === "auth.ts")).toHaveLength(1);
+  });
+
+  it("TC-N-012: スコア降順ソート", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(repoA, { recursive: true });
+    await writeFile(join(repoA, "auth.ts"), "authentication token logic");
+    await writeFile(join(repoA, "user.ts"), "user management");
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const results = await callGetContext({ context: "認証トークンユーザ" }, configs, repoA, ["authentication", "token", "user"]);
+
+    const paths = results.map((r) => r.path);
+    expect(paths.indexOf("auth.ts")).toBeLessThan(paths.indexOf("user.ts"));
+  });
+
+  it("TC-N-013: 結果件数が20件を超える場合 → 上位20件のみ返す", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(repoA, { recursive: true });
+    for (let i = 1; i <= 25; i++) {
+      await writeFile(join(repoA, `file-${String(i).padStart(2, "0")}.ts`), "target keyword");
+    }
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const results = await callGetContext({ context: "target" }, configs, repoA, ["target"]);
+
+    expect(results).toHaveLength(20);
+  });
+
+  it("TC-N-014: フォールバック — extractKeywords が空配列を返す", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(repoA, { recursive: true });
+    await writeFile(join(repoA, "api.ts"), "api db");
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const results = await callGetContext({ context: "api db" }, configs, repoA, []);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].path).toBe("api.ts");
+  });
+
+  it("TC-B-010: 結果件数がちょうど20件", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(repoA, { recursive: true });
+    for (let i = 1; i <= 20; i++) {
+      await writeFile(join(repoA, `file-${String(i).padStart(2, "0")}.ts`), "target keyword");
+    }
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const results = await callGetContext({ context: "target" }, configs, repoA, ["target"]);
+
+    expect(results).toHaveLength(20);
+  });
+
+  it("TC-B-011: 結果件数が21件 → 上位20件に切り捨て", async () => {
+    const repoA = join(baseDir, "repo-a");
+    await mkdir(repoA, { recursive: true });
+    for (let i = 1; i <= 21; i++) {
+      await writeFile(join(repoA, `file-${String(i).padStart(2, "0")}.ts`), "target keyword");
+    }
+
+    const configs = [makeConfig("repo-a", repoA)];
+    const results = await callGetContext({ context: "target" }, configs, repoA, ["target"]);
+
+    expect(results).toHaveLength(20);
   });
 });

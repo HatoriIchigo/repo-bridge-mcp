@@ -1,6 +1,7 @@
 import { resolve } from "path";
 import type { RepositoryConfig, ContextResult } from "./types.js";
 import { searchContent } from "./file-searcher.js";
+import { extractKeywords } from "./keyword-extractor.js";
 
 interface GetContextOptions {
   context: string;
@@ -34,5 +35,28 @@ export async function getContext(options: GetContextOptions): Promise<ContextRes
     }
   }
 
-  return searchContent({ keyword: context, configs: targets });
+  const extracted = await extractKeywords(context);
+  const keywords = extracted.length > 0 ? extracted : [context];
+
+  const allResults = await Promise.all(
+    keywords.map((kw) => searchContent({ keyword: kw, configs: targets })),
+  );
+
+  const scoreMap = new Map<string, { result: ContextResult; score: number }>();
+  for (const results of allResults) {
+    for (const result of results) {
+      const key = `${result.repository_id}::${result.path}`;
+      const existing = scoreMap.get(key);
+      if (existing) {
+        existing.score += 1;
+      } else {
+        scoreMap.set(key, { result, score: 1 });
+      }
+    }
+  }
+
+  return Array.from(scoreMap.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map((entry) => entry.result);
 }
