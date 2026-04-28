@@ -1,17 +1,20 @@
 import { readdir, readFile } from "fs/promises";
 import { join, resolve, relative } from "path";
 import type { RepositoryConfig, FileEntry, ContextResult } from "./types.js";
+import type { CacheStore } from "./cache-store.js";
 
 interface SearchFilesOptions {
   pattern: string;
   repository_id?: string;
   configs: RepositoryConfig[];
+  cacheStore?: CacheStore;
 }
 
 interface ReadFileOptions {
   repository_id: string;
   path: string;
   configs: RepositoryConfig[];
+  cacheStore?: CacheStore;
 }
 
 /** globパターンを正規表現に変換する（外部ライブラリ不使用）。 */
@@ -54,6 +57,14 @@ function isExcluded(relPath: string, excludePatterns: string[]): boolean {
   });
 }
 
+/** 相対パスが glob パターン（cache_exclude_patterns）のいずれかに該当するか判定する。 */
+function isCacheGlobExcluded(relPath: string, patterns: string[]): boolean {
+  return patterns.some((pat) => {
+    const regex = globToRegex(pat);
+    return regex.test(relPath);
+  });
+}
+
 /**
  * 登録リポジトリを横断してglobパターンにマッチするファイルを検索する。
  * @param options.pattern - ファイル名のglobパターン
@@ -61,7 +72,7 @@ function isExcluded(relPath: string, excludePatterns: string[]): boolean {
  * @param options.configs - リポジトリ設定一覧
  */
 export async function searchFiles(options: SearchFilesOptions): Promise<FileEntry[]> {
-  const { pattern, repository_id, configs } = options;
+  const { pattern, repository_id, configs, cacheStore } = options;
 
   if (!pattern) return [];
 
@@ -74,10 +85,16 @@ export async function searchFiles(options: SearchFilesOptions): Promise<FileEntr
 
   for (const config of targets) {
     let allFiles: string[];
-    try {
-      allFiles = await walkDir(config.path, config.path);
-    } catch {
-      continue;
+
+    const cached = cacheStore ? await cacheStore.getFileList(config.id) : null;
+    if (cached !== null) {
+      allFiles = cached;
+    } else {
+      try {
+        allFiles = await walkDir(config.path, config.path);
+      } catch {
+        continue;
+      }
     }
 
     for (const relPath of allFiles) {
@@ -165,7 +182,7 @@ export async function searchContent(options: SearchContentOptions): Promise<Cont
  * @throws パストラバーサルの場合 `Error: Path traversal is not allowed`
  */
 export async function readFileContent(options: ReadFileOptions): Promise<string> {
-  const { repository_id, path: inputPath, configs } = options;
+  const { repository_id, path: inputPath, configs, cacheStore } = options;
 
   const config = configs.find((c) => c.id === repository_id);
   if (!config) throw new Error(`Repository not found: ${repository_id}`);
@@ -177,5 +194,24 @@ export async function readFileContent(options: ReadFileOptions): Promise<string>
     throw new Error("Path traversal is not allowed");
   }
 
-  return readFile(fullPath, "utf-8");
+  if (cacheStore) {
+    const cached = await cacheStore.getFileContent(repository_id, inputPath);
+    if (cached !== null) return cached;
+  }
+
+  const content = await readFile(fullPath, "utf-8");
+
+  if (cacheStore) {
+    const cacheExclude = config.cache_exclude_patterns ?? [];
+    const shouldCache = !isExcluded(inputPath, cacheExclude) && !isCacheGlobExcluded(inputPath, cacheExclude);
+    if (shouldCache) {
+      try {
+        await cacheStore.setFileContent(repository_id, config.name, inputPath, content);
+      } catch {
+        // キャッシュ書き込み失敗はスキップ
+      }
+    }
+  }
+
+  return content;
 }

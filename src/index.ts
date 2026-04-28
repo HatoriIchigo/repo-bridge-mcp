@@ -1,9 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { loadRepositories } from "./repository-manager.js";
+import { loadRepositories, loadSettings } from "./repository-manager.js";
 import { searchFiles, readFileContent, searchContent } from "./file-searcher.js";
 import { getContext } from "./context-provider.js";
+import { CacheStore, clearCacheIfNeeded } from "./cache-store.js";
+
+const settings = await loadSettings();
+await clearCacheIfNeeded(process.cwd(), settings.cache_delete);
+const cacheStore = new CacheStore(process.cwd(), settings.local_cache !== false);
 
 const server = new McpServer(
   { name: "repo-bridge-mcp", version: "0.1.0" },
@@ -36,7 +41,7 @@ server.tool(
   },
   async ({ pattern, repository_id }) => {
     const configs = await loadRepositories();
-    const results = await searchFiles({ pattern, repository_id, configs });
+    const results = await searchFiles({ pattern, repository_id, configs, cacheStore });
     return {
       content: [{ type: "text", text: JSON.stringify(results) }],
     };
@@ -52,7 +57,7 @@ server.tool(
   },
   async ({ repository_id, path }) => {
     const configs = await loadRepositories();
-    const content = await readFileContent({ repository_id, path, configs });
+    const content = await readFileContent({ repository_id, path, configs, cacheStore });
     return {
       content: [{ type: "text", text: content }],
     };

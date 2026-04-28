@@ -52,7 +52,8 @@ claude mcp add repo-bridge -- node /path/to/repo-bridge-mcp/dist/index.js
       "name": "My Repository",
       "path": "/path/to/my-repo",
       "enabled": true,
-      "exclude_patterns": ["node_modules", ".git"]
+      "exclude_patterns": ["node_modules", ".git"],
+      "cache_exclude_patterns": ["src/**"]
     },
     {
       "id": "another-repo",
@@ -61,9 +62,20 @@ claude mcp add repo-bridge -- node /path/to/repo-bridge-mcp/dist/index.js
       "enabled": false,
       "exclude_patterns": ["dist"]
     }
-  ]
+  ],
+  "local_cache": true,
+  "cache_delete": true
 }
 ```
+
+**グローバルフィールド**
+
+| フィールド | 型 | 省略時 | 説明 |
+|---|---|---|---|
+| `local_cache` | boolean | `true` | `true` でディスクキャッシュを有効化 |
+| `cache_delete` | boolean | `true` | `true` でMCP起動時に `.repo-bridge/cache/` を削除して初期化 |
+
+**リポジトリフィールド**
 
 | フィールド | 型 | 必須 | 説明 |
 |---|---|---|---|
@@ -72,6 +84,7 @@ claude mcp add repo-bridge -- node /path/to/repo-bridge-mcp/dist/index.js
 | `path` | string | ○ | ローカルFS上の絶対パス |
 | `enabled` | boolean | ○ | `false` にすると参照対象から除外 |
 | `exclude_patterns` | string[] | ○ | 検索除外パターン（空配列可） |
+| `cache_exclude_patterns` | string[] | - | キャッシュ対象外パターン（globパターン形式、省略時は全ファイルをキャッシュ） |
 
 詳細は `docs/design.md` 参照。
 
