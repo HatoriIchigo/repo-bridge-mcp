@@ -1,4 +1,4 @@
-import { readdir, readFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import { join } from "path";
 import type { RepositoryConfig } from "./types.js";
 
@@ -14,33 +14,30 @@ function isRepositoryConfig(value: unknown): value is RepositoryConfig {
   );
 }
 
-export async function loadRepositories(baseDir: string = process.cwd()): Promise<RepositoryConfig[]> {
-  const repoBridgeDir = join(baseDir, ".repo-bridge");
+function isSettings(value: unknown): value is { repositories: unknown[] } {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return Array.isArray(v["repositories"]);
+}
 
-  let entries: string[];
+export async function loadRepositories(baseDir: string = process.cwd()): Promise<RepositoryConfig[]> {
+  const settingsPath = join(baseDir, ".repo-bridge", "settings.json");
+
+  let content: string;
   try {
-    const dirents = await readdir(repoBridgeDir, { withFileTypes: true });
-    entries = dirents
-      .filter((d) => d.isFile() && d.name.endsWith(".json"))
-      .map((d) => d.name);
+    content = await readFile(settingsPath, "utf-8");
   } catch {
     return [];
   }
 
-  const repositories: RepositoryConfig[] = [];
-
-  for (const filename of entries) {
-    try {
-      const content = await readFile(join(repoBridgeDir, filename), "utf-8");
-      const parsed: unknown = JSON.parse(content);
-
-      if (!isRepositoryConfig(parsed) || !parsed.enabled) continue;
-
-      repositories.push(parsed);
-    } catch {
-      continue;
-    }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return [];
   }
 
-  return repositories;
+  if (!isSettings(parsed)) return [];
+
+  return parsed.repositories.filter((r): r is RepositoryConfig => isRepositoryConfig(r) && r.enabled);
 }
