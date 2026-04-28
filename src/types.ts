@@ -17,3 +17,9 @@ export interface FileEntry {
   path: string;
   type: "file" | "directory";
 }
+
+export interface ContextResult {
+  repository_id: string;
+  path: string;
+  snippet: string;
+}

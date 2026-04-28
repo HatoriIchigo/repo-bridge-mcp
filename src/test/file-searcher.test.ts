@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { mkdtemp, mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { searchFiles, readFileContent } from "../file-searcher.js";
+import { searchFiles, readFileContent, searchContent } from "../file-searcher.js";
 import type { RepositoryConfig } from "../types.js";
 
 let baseDir: string;
@@ -148,6 +148,170 @@ describe("異常系", () => {
     await expect(
       readFileContent({ repository_id: "repo-a", path: "nonexistent.ts", configs })
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+// searchContent テスト
+
+describe("searchContent", () => {
+  describe("正常系", () => {
+    it("TC-SC-001: キーワードにマッチした行のスニペットを返す", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(join(repoA, "src"), { recursive: true });
+      await writeFile(join(repoA, "src", "auth.ts"), [
+        "line1",
+        "line2",
+        "line3",
+        "authentication logic",
+        "line5",
+        "line6",
+        "line7",
+      ].join("\n"));
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "authentication", configs });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].repository_id).toBe("repo-a");
+      expect(results[0].path).toBe("src/auth.ts");
+      expect(results[0].snippet).toContain("authentication logic");
+      expect(results[0].snippet).toContain("line1");
+      expect(results[0].snippet).toContain("line7");
+    });
+
+    it("TC-SC-002: 複数ファイルにマッチする場合、それぞれのエントリを返す", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(join(repoA, "src"), { recursive: true });
+      await writeFile(join(repoA, "src", "a.ts"), "config value here");
+      await writeFile(join(repoA, "src", "b.ts"), "another config entry");
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "config", configs });
+
+      expect(results).toHaveLength(2);
+      const paths = results.map((r) => r.path);
+      expect(paths).toEqual(expect.arrayContaining(["src/a.ts", "src/b.ts"]));
+    });
+
+    it("TC-SC-003: 複数リポジトリを横断して検索する", async () => {
+      const repoA = join(baseDir, "repo-a");
+      const repoB = join(baseDir, "repo-b");
+      await mkdir(repoA, { recursive: true });
+      await mkdir(repoB, { recursive: true });
+      await writeFile(join(repoA, "config.ts"), "config setting");
+      await writeFile(join(repoB, "settings.ts"), "config option");
+
+      const configs = [makeConfig("repo-a", repoA), makeConfig("repo-b", repoB)];
+      const results = await searchContent({ keyword: "config", configs });
+
+      expect(results).toHaveLength(2);
+      const repoIds = results.map((r) => r.repository_id);
+      expect(repoIds).toEqual(expect.arrayContaining(["repo-a", "repo-b"]));
+    });
+
+    it("TC-SC-004: マッチするファイルなし → 空配列返却", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(repoA, { recursive: true });
+      await writeFile(join(repoA, "main.ts"), "hello world");
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "zzz_no_match_keyword_xyz", configs });
+
+      expect(results).toEqual([]);
+    });
+
+    it("TC-SC-005: 1ファイルに複数ヒット → 1エントリで結合", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(repoA, { recursive: true });
+      await writeFile(join(repoA, "multi.ts"), [
+        "line1",
+        "keyword here",
+        "line3",
+        "line4",
+        "line5",
+        "another keyword",
+        "line7",
+      ].join("\n"));
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "keyword", configs });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].snippet).toContain("keyword here");
+      expect(results[0].snippet).toContain("another keyword");
+    });
+
+    it("TC-SC-006: リポジトリパスが存在しない場合スキップ", async () => {
+      const repoA = join(baseDir, "repo-a");
+      const repoB = join(baseDir, "repo-b");
+      await mkdir(repoA, { recursive: true });
+      await writeFile(join(repoA, "main.ts"), "keyword here");
+
+      const configs = [makeConfig("repo-a", repoA), makeConfig("repo-b", repoB)];
+      const results = await searchContent({ keyword: "keyword", configs });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].repository_id).toBe("repo-a");
+    });
+  });
+
+  describe("境界値", () => {
+    it("TC-SC-B-001: ファイル先頭行（1行目）にヒット → 前3行なし、後3行のみ", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(repoA, { recursive: true });
+      const lines = ["TARGET_KEYWORD", "line2", "line3", "line4", "line5", "line6", "line7", "line8", "line9", "line10"];
+      await writeFile(join(repoA, "file.ts"), lines.join("\n"));
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "TARGET_KEYWORD", configs });
+
+      expect(results).toHaveLength(1);
+      const snippet = results[0].snippet;
+      expect(snippet).toContain("TARGET_KEYWORD");
+      expect(snippet).toContain("line2");
+      expect(snippet).toContain("line3");
+      expect(snippet).toContain("line4");
+      expect(snippet).not.toContain("line5");
+    });
+
+    it("TC-SC-B-002: ファイル末尾行（最終行）にヒット → 後3行なし、前3行のみ", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(repoA, { recursive: true });
+      const lines = ["line1", "line2", "line3", "line4", "line5", "line6", "line7", "line8", "line9", "TARGET_KEYWORD"];
+      await writeFile(join(repoA, "file.ts"), lines.join("\n"));
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "TARGET_KEYWORD", configs });
+
+      expect(results).toHaveLength(1);
+      const snippet = results[0].snippet;
+      expect(snippet).toContain("TARGET_KEYWORD");
+      expect(snippet).toContain("line7");
+      expect(snippet).toContain("line8");
+      expect(snippet).toContain("line9");
+      expect(snippet).not.toContain("line6");
+    });
+
+    it("TC-SC-B-003: ファイル中央行（4行目）にヒット → 前後3行含む", async () => {
+      const repoA = join(baseDir, "repo-a");
+      await mkdir(repoA, { recursive: true });
+      const lines = ["line1", "line2", "line3", "TARGET_KEYWORD", "line5", "line6", "line7", "line8", "line9", "line10"];
+      await writeFile(join(repoA, "file.ts"), lines.join("\n"));
+
+      const configs = [makeConfig("repo-a", repoA)];
+      const results = await searchContent({ keyword: "TARGET_KEYWORD", configs });
+
+      expect(results).toHaveLength(1);
+      const snippet = results[0].snippet;
+      expect(snippet).toContain("line1");
+      expect(snippet).toContain("line2");
+      expect(snippet).toContain("line3");
+      expect(snippet).toContain("TARGET_KEYWORD");
+      expect(snippet).toContain("line5");
+      expect(snippet).toContain("line6");
+      expect(snippet).toContain("line7");
+      expect(snippet).not.toContain("line8");
+    });
   });
 });
 

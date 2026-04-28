@@ -1,6 +1,6 @@
 import { readdir, readFile } from "fs/promises";
 import { join, resolve, relative } from "path";
-import type { RepositoryConfig, FileEntry } from "./types.js";
+import type { RepositoryConfig, FileEntry, ContextResult } from "./types.js";
 
 interface SearchFilesOptions {
   pattern: string;
@@ -80,6 +80,71 @@ export async function searchFiles(options: SearchFilesOptions): Promise<FileEntr
       if (isExcluded(relPath, config.exclude_patterns)) continue;
       if (!regex.test(relPath)) continue;
       results.push({ repository_id: config.id, path: relPath, type: "file" });
+    }
+  }
+
+  return results;
+}
+
+interface SearchContentOptions {
+  keyword: string;
+  configs: RepositoryConfig[];
+}
+
+/** ヒット行インデックスのリストからスニペット文字列を生成する（前後3行）。 */
+function buildSnippet(lines: string[], hitIndices: number[]): string {
+  const included = new Set<number>();
+  for (const idx of hitIndices) {
+    for (let i = Math.max(0, idx - 3); i <= Math.min(lines.length - 1, idx + 3); i++) {
+      included.add(i);
+    }
+  }
+  return Array.from(included)
+    .sort((a, b) => a - b)
+    .map((i) => lines[i])
+    .join("\n");
+}
+
+/**
+ * 登録リポジトリを横断してファイル内容をキーワード検索し、スニペットを返す。
+ * @param options.keyword - 検索キーワード
+ * @param options.configs - リポジトリ設定一覧
+ */
+export async function searchContent(options: SearchContentOptions): Promise<ContextResult[]> {
+  const { keyword, configs } = options;
+  const results: ContextResult[] = [];
+
+  for (const config of configs) {
+    let allFiles: string[];
+    try {
+      allFiles = await walkDir(config.path, config.path);
+    } catch {
+      continue;
+    }
+
+    for (const relPath of allFiles) {
+      if (isExcluded(relPath, config.exclude_patterns)) continue;
+
+      const fullPath = resolve(config.path, relPath);
+      let content: string;
+      try {
+        content = await readFile(fullPath, "utf-8");
+      } catch {
+        continue;
+      }
+
+      const lines = content.split("\n");
+      const hitIndices = lines
+        .map((line, idx) => (line.includes(keyword) ? idx : -1))
+        .filter((idx) => idx !== -1);
+
+      if (hitIndices.length === 0) continue;
+
+      results.push({
+        repository_id: config.id,
+        path: relPath,
+        snippet: buildSnippet(lines, hitIndices),
+      });
     }
   }
 

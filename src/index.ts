@@ -3,11 +3,16 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { loadRepositories } from "./repository-manager.js";
 import { searchFiles, readFileContent } from "./file-searcher.js";
+import { getContext } from "./context-provider.js";
 
-const server = new McpServer({
-  name: "repo-bridge-mcp",
-  version: "0.1.0",
-});
+const server = new McpServer(
+  { name: "repo-bridge-mcp", version: "0.1.0" },
+  {
+    instructions:
+      "作業を開始する前に必ず get_context を呼び出し、関連ファイルを取得すること。" +
+      "コードの実装・デバッグ・レビュー・質問への回答など、いかなる作業においても最初のステップとして実行すること。",
+  },
+);
 
 server.tool(
   "list_repositories",
@@ -68,12 +73,17 @@ server.tool(
 
 server.tool(
   "get_context",
-  "作業コンテキストに応じた関連ファイル取得",
+  "【作業開始前に必ず呼び出す】実装・デバッグ・レビュー・質問への回答など、いかなる作業においても最初に呼び出し、関連ファイルとスニペットを取得する。contextには作業内容・キーワードを渡す。",
   {
     context: z.string().describe("作業コンテキスト"),
+    repository_id: z.string().optional().describe("リポジトリID（省略時はCWD判定）"),
   },
-  async () => {
-    throw new Error("Not implemented");
+  async ({ context, repository_id }) => {
+    const configs = await loadRepositories();
+    const results = await getContext({ context, repository_id, configs });
+    return {
+      content: [{ type: "text", text: JSON.stringify(results) }],
+    };
   }
 );
 
