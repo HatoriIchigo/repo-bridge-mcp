@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { loadRepositories } from "./repository-manager.js";
-import { searchFiles, readFileContent } from "./file-searcher.js";
+import { searchFiles, readFileContent, searchContent } from "./file-searcher.js";
 import { getContext } from "./context-provider.js";
 
 const server = new McpServer(
@@ -66,8 +66,13 @@ server.tool(
     keyword: z.string().describe("検索キーワード"),
     repository_id: z.string().optional().describe("リポジトリID（省略時は全リポジトリ対象）"),
   },
-  async () => {
-    throw new Error("Not implemented");
+  async ({ keyword, repository_id }) => {
+    const configs = await loadRepositories();
+    const targets = repository_id ? configs.filter((c) => c.id === repository_id) : configs;
+    const results = await searchContent({ keyword, configs: targets });
+    return {
+      content: [{ type: "text", text: JSON.stringify(results) }],
+    };
   }
 );
 

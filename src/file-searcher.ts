@@ -134,9 +134,16 @@ export async function searchContent(options: SearchContentOptions): Promise<Cont
       }
 
       const lines = content.split("\n");
-      const hitIndices = lines
+      let hitIndices = lines
         .map((line, idx) => (line.includes(keyword) ? idx : -1))
         .filter((idx) => idx !== -1);
+
+      if (hitIndices.length === 0) {
+        const lowerKeyword = keyword.toLowerCase();
+        hitIndices = lines
+          .map((line, idx) => (line.toLowerCase().includes(lowerKeyword) ? idx : -1))
+          .filter((idx) => idx !== -1);
+      }
 
       if (hitIndices.length === 0) continue;
 

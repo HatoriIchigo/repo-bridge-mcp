@@ -29,11 +29,12 @@ graph TD
 
 ### コンポーネント構成
 
-| コンポーネント | 責務 |
-|--------------|------|
-| MCPサーバ本体 | stdioトランスポートでMCPプロトコルを処理、ツールリクエストをディスパッチ |
-| リポジトリアダプタ | ローカルファイルシステム上のリポジトリへのファイル読み取り・検索操作を提供 |
-| 設定管理 | `.repo-bridge/<repo-id>.json` を読み込み、登録リポジトリ情報を管理 |
+| コンポーネント | モジュール | 責務 |
+|--------------|-----------|------|
+| MCPサーバ本体 | `index.ts` | stdioトランスポートでMCPプロトコルを処理、ツールリクエストをディスパッチ |
+| ファイル検索・読み取り | `file-searcher.ts` | globパターン検索・キーワード検索・ファイル読み取り・パストラバーサル防止 |
+| コンテキストプロバイダ | `context-provider.ts` | CWD自動判定によるリポジトリ絞り込みとコンテキスト検索 |
+| 設定管理 | `repository-manager.ts` | `.repo-bridge/<repo-id>.json` の読み込みと型バリデーション |
 
 ---
 
@@ -42,10 +43,9 @@ graph TD
 | 機能ID | 機能名 | 優先度 | 概要 |
 |--------|--------|--------|------|
 | F-001 | リポジトリ登録 | 高 | 参照対象リポジトリをプロジェクト配下の `.repo-bridge/<repo-id>.json` で管理（手動作成） |
-| F-002 | ファイル検索 | 高 | 登録リポジトリ横断でファイル名・パターンによる検索・取得 |
-| F-003 | コンテキスト取得 | 高 | 作業コンテキストに応じた関連ファイルの動的取得 |
-| F-004 | ドキュメント参照 | 中 | docs配下のMarkdownファイルの参照 |
-| F-005 | コード参照 | 中 | ソースコードファイルの参照 |
+| F-002 | ファイル検索・読み取り | 高 | 登録リポジトリ横断でglobパターンによるファイル検索、および指定ファイルの内容取得 |
+| F-003 | コンテキスト取得 | 高 | 作業コンテキスト文字列をキーワードとしてファイル内容を検索し、関連スニペットを動的取得。省略時はCWDから対象リポジトリを自動判定 |
+| F-004 | コンテンツ検索 | 中 | キーワードで登録リポジトリのファイル内容を横断検索し、ヒット行前後3行のスニペットを返す |
 
 ---
 
@@ -53,13 +53,13 @@ graph TD
 
 MCPサーバはHTTPではなくstdioトランスポートを使用するため、APIエンドポイントの代わりにMCPツールとして定義する。
 
-| ツール名 | 概要 | 主な入力パラメータ |
-|---------|------|------------------|
-| `list_repositories` | 登録済みリポジトリの一覧取得 | なし |
-| `search_files` | ファイル名・パターンによる横断検索 | `pattern`, `repository_id?` |
-| `read_file` | 指定ファイルの内容取得 | `repository_id`, `path` |
-| `search_content` | ファイル内容のキーワード検索 | `keyword`, `repository_id?` |
-| `get_context` | 作業コンテキストに応じた関連ファイル取得 | `context` |
+| ツール名 | 概要 | 主な入力パラメータ | 実装状態 |
+|---------|------|------------------|---------|
+| `list_repositories` | 登録済みリポジトリの一覧取得 | なし | 実装済み |
+| `search_files` | ファイル名・パターンによる横断検索 | `pattern`, `repository_id?` | 実装済み |
+| `read_file` | 指定ファイルの内容取得 | `repository_id`, `path` | 実装済み |
+| `search_content` | ファイル内容のキーワード検索（前後3行スニペット付き） | `keyword`, `repository_id?` | 実装済み（ツール登録のみ未完） |
+| `get_context` | 作業コンテキストに応じた関連ファイル取得（CWD自動判定） | `context`, `repository_id?` | 実装済み |
 
 ---
 
@@ -84,15 +84,15 @@ erDiagram
     string repository_id FK
     string type
   }
-  SearchResult {
-    string file_entry_path FK
+  ContextResult {
+    string repository_id FK
+    string path
     string snippet
-    float relevance_score
   }
 
   RepositoryConfig ||--|| Repository : "生成"
   Repository ||--o{ FileEntry : "含む"
-  FileEntry ||--o{ SearchResult : "返す"
+  FileEntry ||--o{ ContextResult : "返す"
 ```
 
 ### 各エンティティの説明
@@ -102,7 +102,7 @@ erDiagram
 | `RepositoryConfig` | `.repo-bridge/<repo-id>.json` の1ファイル = 1リポジトリ設定 |
 | `Repository` | 実行時のリポジトリ表現。`RepositoryConfig` から生成される |
 | `FileEntry` | リポジトリ内の1ファイルを表すエントリ |
-| `SearchResult` | 検索クエリに対する結果（ファイルエントリ・スニペット・スコア） |
+| `ContextResult` | コンテキスト取得クエリに対する結果（リポジトリID・ファイルパス・スニペット） |
 
 ---
 
@@ -111,8 +111,9 @@ erDiagram
 | 項目 | 要件 |
 |------|------|
 | パフォーマンス | ファイル検索レスポンス 1000ms以内（95パーセンタイル） |
-| セキュリティ | 登録リポジトリ外へのパストラバーサル禁止 |
-| 設定管理 | `.repo-bridge/<repo-id>.json`（リポジトリごと1ファイル）による除外パターン管理 |
+| セキュリティ | `readFileContent` でパストラバーサル検出時は即時エラー（`resolve` による絶対パス比較） |
+| 設定管理 | `.repo-bridge/<repo-id>.json`（リポジトリごと1ファイル）で `enabled` フラグ・除外パターンを管理 |
+| 堅牢性 | 設定ファイルのパース失敗・リポジトリパス不正は個別スキップし、他のリポジトリ処理を継続 |
 
 ---
 
