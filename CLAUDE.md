@@ -21,6 +21,7 @@
 - **言語**: TypeScript
 - **ランタイム**: Node.js
 - **MCPフレームワーク**: @modelcontextprotocol/sdk
+- **形態素解析**: kuromoji
 - **パッケージ管理**: npm
 
 ## コマンド
