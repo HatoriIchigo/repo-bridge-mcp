@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { mkdtemp, mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -116,5 +116,165 @@ describe("境界値", () => {
     const result = await loadRepositories(baseDir);
 
     expect(result).toEqual([]);
+  });
+});
+
+// path変数展開
+
+describe("path変数展開 正常系", () => {
+  const originalHome = process.env["HOME"];
+  let cwdSpy: ReturnType<typeof jest.spyOn>;
+
+  beforeEach(() => {
+    process.env["HOME"] = "/home/testuser";
+  });
+
+  afterEach(() => {
+    if (originalHome === undefined) {
+      delete process.env["HOME"];
+    } else {
+      process.env["HOME"] = originalHome;
+    }
+    if (cwdSpy) cwdSpy.mockRestore();
+  });
+
+  it("TC10: ${HOME} を含む path が process.env.HOME の値に展開されること", async () => {
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "${HOME}/repos/my-repo", enabled: true, exclude_patterns: [] },
+    ]);
+
+    const result = await loadRepositories(baseDir);
+
+    expect(result[0].path).toBe("/home/testuser/repos/my-repo");
+  });
+
+  it("TC11: ${CUR} を含む path が process.cwd() の値に展開されること", async () => {
+    cwdSpy = jest.spyOn(process, "cwd").mockReturnValue("/workspace");
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "${CUR}/repos/my-repo", enabled: true, exclude_patterns: [] },
+    ]);
+
+    const result = await loadRepositories(baseDir);
+
+    expect(result[0].path).toBe("/workspace/repos/my-repo");
+  });
+
+  it("TC12: ${HOME} と ${CUR} を含まない path は変更されないこと", async () => {
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "/absolute/path/to/repo", enabled: true, exclude_patterns: [] },
+    ]);
+
+    const result = await loadRepositories(baseDir);
+
+    expect(result[0].path).toBe("/absolute/path/to/repo");
+  });
+
+  it("TC13: path 内に ${HOME} と ${CUR} が両方含まれる場合、両方展開されること", async () => {
+    cwdSpy = jest.spyOn(process, "cwd").mockReturnValue("/workspace");
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "${HOME}/base/${CUR}/sub", enabled: true, exclude_patterns: [] },
+    ]);
+
+    const result = await loadRepositories(baseDir);
+
+    expect(result[0].path).toBe("/home/testuser/base//workspace/sub");
+  });
+
+  it("TC14: path 内に ${HOME} が複数回現れる場合、全て展開されること", async () => {
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "${HOME}/${HOME}", enabled: true, exclude_patterns: [] },
+    ]);
+
+    const result = await loadRepositories(baseDir);
+
+    expect(result[0].path).toBe("/home/testuser//home/testuser");
+  });
+});
+
+describe("path変数展開 異常系", () => {
+  const originalHome = process.env["HOME"];
+  let cwdSpy: ReturnType<typeof jest.spyOn>;
+
+  afterEach(() => {
+    if (originalHome === undefined) {
+      delete process.env["HOME"];
+    } else {
+      process.env["HOME"] = originalHome;
+    }
+    if (cwdSpy) cwdSpy.mockRestore();
+  });
+
+  it("TC15: ${HOME} を含む path で process.env.HOME が undefined の場合、エラーをスローすること", async () => {
+    delete process.env["HOME"];
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "${HOME}/repos/my-repo", enabled: true, exclude_patterns: [] },
+    ]);
+
+    await expect(loadRepositories(baseDir)).rejects.toThrow("Variable ${HOME} is not defined");
+  });
+
+  it("TC16: ${HOME} を含む path で process.env.HOME が空文字の場合、エラーをスローすること", async () => {
+    process.env["HOME"] = "";
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "${HOME}/repos/my-repo", enabled: true, exclude_patterns: [] },
+    ]);
+
+    await expect(loadRepositories(baseDir)).rejects.toThrow("Variable ${HOME} is not defined");
+  });
+
+  it("TC17: ${CUR} を含む path で process.cwd() が空文字を返す場合、エラーをスローすること", async () => {
+    process.env["HOME"] = "/home/testuser";
+    cwdSpy = jest.spyOn(process, "cwd").mockReturnValue("");
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "${CUR}/repos/my-repo", enabled: true, exclude_patterns: [] },
+    ]);
+
+    await expect(loadRepositories(baseDir)).rejects.toThrow("Variable ${CUR} is not defined");
+  });
+});
+
+describe("path変数展開 境界値", () => {
+  const originalHome = process.env["HOME"];
+
+  beforeEach(() => {
+    process.env["HOME"] = "/home/testuser";
+  });
+
+  afterEach(() => {
+    if (originalHome === undefined) {
+      delete process.env["HOME"];
+    } else {
+      process.env["HOME"] = originalHome;
+    }
+  });
+
+  it("TC18: path が ${HOME} のみの場合、ホームディレクトリそのものに展開されること", async () => {
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "${HOME}", enabled: true, exclude_patterns: [] },
+    ]);
+
+    const result = await loadRepositories(baseDir);
+
+    expect(result[0].path).toBe("/home/testuser");
+  });
+
+  it("TC19: path が空文字の場合、展開処理が行われず空文字のまま返ること", async () => {
+    await mkdir(repoBridgeDir(baseDir));
+    await writeSettings(baseDir, [
+      { id: "my-repo", name: "My Repository", path: "", enabled: true, exclude_patterns: [] },
+    ]);
+
+    const result = await loadRepositories(baseDir);
+
+    expect(result[0].path).toBe("");
   });
 });
